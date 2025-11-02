@@ -1,0 +1,22 @@
+[versions]
+shadow = "8.3.8"
+lombok-plugin = "9.0.0"
+
+lettuce = "6.8.1.RELEASE"
+caffeine = "3.2.2"
+apache-commons-pool2 = "2.11.1"
+
+gson = "2.13.2"
+jetbrains-annotations = "26.0.2-1"
+
+[plugins]
+shadow = { id = "com.gradleup.shadow", version.ref = "shadow" }
+lombok = { id = "io.freefair.lombok", version.ref = "lombok-plugin" }
+
+[libraries]
+lettuce = { group = "io.lettuce", name = "lettuce-core", version.ref = "lettuce" }
+caffeine = { group = "com.github.ben-manes.caffeine", name = "caffeine", version.ref = "caffeine" }
+apache-commons-pool2 = { group = "org.apache.commons", name = "commons-pool2", version.ref = "apache-commons-pool2" }
+
+gson = { group = "com.google.code.gson", name = "gson", version.ref = "gson" }
+jetbrains-annotations = { group = "org.jetbrains", name = "annotations", version.ref = "jetbrains-annotations" }

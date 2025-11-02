@@ -1,0 +1,21 @@
+plugins {
+    java
+    alias(libs.plugins.shadow)
+    alias(libs.plugins.lombok)
+}
+
+dependencies {
+    implementation(project(":api"))
+    compileOnly(libs.jetbrains.annotations)
+
+    testImplementation("org.junit.jupiter:junit-jupiter:6.0.1")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+}
+
+tasks.shadowJar {
+    archiveClassifier.set("")
+}
+
+tasks.test {
+    useJUnitPlatform()
+}
