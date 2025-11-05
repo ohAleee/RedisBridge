@@ -19,11 +19,13 @@ A lightweight, type-safe Java library for Redis-based inter-service messaging wi
 
 ## Installation
 
+RedisBridge is available on Maven Central.
+
 ### Gradle (Kotlin DSL)
 
 ```kotlin
 dependencies {
-    implementation("it.ohalee:redisbridge-core:1.0.0")
+    implementation("com.ohalee.redis-bridge:core:1.0.0")
 }
 ```
 
@@ -31,7 +33,7 @@ dependencies {
 
 ```groovy
 dependencies {
-    implementation 'it.ohalee:redisbridge-core:1.0.0'
+    implementation 'com.ohalee.redis-bridge:core:1.0.0'
 }
 ```
 
@@ -39,8 +41,8 @@ dependencies {
 
 ```xml
 <dependency>
-    <groupId>it.ohalee</groupId>
-    <artifactId>redisbridge-core</artifactId>
+    <groupId>com.ohalee.redis-bridge</groupId>
+    <artifactId>core</artifactId>
     <version>1.0.0</version>
 </dependency>
 ```
