@@ -25,7 +25,7 @@ RedisBridge is available on Maven Central.
 
 ```kotlin
 dependencies {
-    implementation("com.ohalee.redis-bridge:core:1.0.0")
+    implementation("com.ohalee.redis-bridge:core:1.0.1")
 }
 ```
 
@@ -33,7 +33,7 @@ dependencies {
 
 ```groovy
 dependencies {
-    implementation 'com.ohalee.redis-bridge:core:1.0.0'
+    implementation 'com.ohalee.redis-bridge:core:1.0.1'
 }
 ```
 
