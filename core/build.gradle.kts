@@ -15,7 +15,3 @@ dependencies {
 tasks.shadowJar {
     archiveClassifier.set("")
 }
-
-tasks.test {
-    useJUnitPlatform()
-}
