@@ -21,14 +21,23 @@ import org.jetbrains.annotations.NotNull;
 public interface MessageEntity {
 
     /**
+     * The prefix used for all Redis channels. Can be customized by setting the system property
+     * "redisbridge.channel.prefix" or environment variable "REDISBRIDGE_CHANNEL_PREFIX".
+     * Defaults to "redisbridge" if not specified.
+     */
+    String PREFIX = System.getProperty("redisbridge.channel.prefix",
+            System.getenv().getOrDefault("REDISBRIDGE_CHANNEL_PREFIX", "redisbridge"));
+
+    MessageEntity BROADCAST = of("broadcast");
+
+    /**
      * Creates a message entity for targeting a specific server.
      *
      * @param serverID the unique identifier of the target server
      * @return a message entity targeting the specified server
      */
     static @NotNull MessageEntity of(@NotNull String serverID) {
-        // TODO: custom prefix
-        return () -> "a:target:" + serverID.toLowerCase();
+        return () -> PREFIX + ":target:" + serverID.toLowerCase();
     }
 
     /**
@@ -38,8 +47,7 @@ public interface MessageEntity {
      * @return a message entity targeting the specific sender's response channel
      */
     static @NotNull MessageEntity response(@NotNull String serverID) {
-        // TODO: custom prefix
-        return () -> "a:response:" + serverID.toLowerCase();
+        return () -> PREFIX + ":response:" + serverID.toLowerCase();
     }
 
     /**
