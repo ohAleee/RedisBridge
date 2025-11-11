@@ -1,6 +1,15 @@
 # RedisBridge
+[![Maven Central](https://img.shields.io/maven-central/v/com.ohalee.redis-bridge/api.svg)](https://central.sonatype.com/artifact/com.ohalee.redis-bridge/api)
+[![MIT License](https://img.shields.io/badge/license-MIT-green.svg)](https://github.com/ohAleee/RedisBridge/blob/master/LICENSE)
 
-A lightweight, type-safe Java library for Redis-based inter-service messaging with request-response pattern support.
+A lightweight Java library for Redis-based inter-service messaging with request-response pattern support.
+
+## Table of Contents
+- [Quick Start](#quick-start)
+- [Core Concepts](#core-concepts)
+- [Architecture](#architecture)
+- [Best Practices](#best-practices)
+- [License](#license)
 
 ## Features
 
@@ -25,7 +34,7 @@ RedisBridge is available on Maven Central.
 
 ```kotlin
 dependencies {
-    implementation("com.ohalee.redis-bridge:core:1.0.1")
+    implementation("com.ohalee.redis-bridge:core:{version}")
 }
 ```
 
@@ -33,7 +42,7 @@ dependencies {
 
 ```groovy
 dependencies {
-    implementation 'com.ohalee.redis-bridge:core:1.0.1'
+    implementation 'com.ohalee.redis-bridge:core:{version}'
 }
 ```
 
@@ -43,7 +52,7 @@ dependencies {
 <dependency>
     <groupId>com.ohalee.redis-bridge</groupId>
     <artifactId>core</artifactId>
-    <version>1.0.0</version>
+    <version>{version}</version>
 </dependency>
 ```
 
@@ -129,7 +138,7 @@ client.getRegistry()
 ```java
 client.getRedisRouter().publish(
     new UserLoginMessage("john_doe", System.currentTimeMillis()),
-    client.platformEntity()
+    receiver.platformEntity()
 );
 ```
 
@@ -139,7 +148,7 @@ client.getRedisRouter().publish(
 client.getRedisRouter()
     .waitResponse(
         new UserLoginMessage("john_doe", System.currentTimeMillis()),
-        client.platformEntity(),
+        receiver.platformEntity(),
         LoginResponse.class
     )
     .thenAccept(fullResponse -> {
