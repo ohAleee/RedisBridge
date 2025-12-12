@@ -38,6 +38,35 @@ public interface MessageRouter {
     <M extends BaseMessage> CompletionStage<Message<M>> publish(@NotNull M message, @NotNull MessageEntity receiver);
 
     /**
+     * Publishes a message immediately to a specific receiver without expecting a response.
+     * This method publishes the message instantly.
+     *
+     * @param message  the message to publish
+     * @param receiver the entity that should receive the message
+     * @param <M>      the message type
+     * @return a completion stage containing the full message that was published
+     */
+    <M extends BaseMessage> CompletionStage<Message<M>> publishImmediate(@NotNull M message, @NotNull MessageEntity receiver);
+
+    /**
+     * Queues a message for batched publishing to a specific receiver without expecting a response.
+     * Messages are published periodically in batches to reduce Redis connection overhead.
+     *
+     * @param message  the message to publish
+     * @param receiver the entity that should receive the message
+     * @param <M>      the message type
+     * @return a completion stage containing the full message that was published, completed when the batch is sent
+     */
+    <M extends BaseMessage> CompletionStage<Message<M>> publishQueued(@NotNull M message, @NotNull MessageEntity receiver);
+
+    /**
+     * Configures the interval for batched publishing.
+     *
+     * @param intervalMs the interval in milliseconds between batch publishes (default: 100ms)
+     */
+    void configureQueuedPublishing(long intervalMs);
+
+    /**
      * Publishes a message and waits for a response from the receiver.
      *
      * @param message  the message to publish
