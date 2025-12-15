@@ -8,6 +8,7 @@ A lightweight Java library for Redis-based inter-service messaging with request-
 - [Quick Start](#quick-start)
 - [Core Concepts](#core-concepts)
 - [Architecture](#architecture)
+- [ACK (Acknowledgements)](#ack-acknowledgements)
 - [Best Practices](#best-practices)
 - [License](#license)
 
@@ -167,6 +168,61 @@ client.getRedisRouter()
         return null;
     });
 ```
+
+## ACK (Acknowledgements)
+
+RedisBridge can optionally wait for a lightweight delivery acknowledgement (ACK) when publishing a message. This helps ensure that the target service (or channel) actually received the message.
+
+### Enable ACK on a Message
+
+ACK is opt-in and controlled per-message by overriding `ackEnabled()` in your `BaseMessage` implementation:
+
+```java
+public record CriticalEvent(String id) implements BaseMessage {
+    public static final String NAMESPACE = "events:critical";
+
+    @Override
+    public String namespace() { return NAMESPACE; }
+
+    @Override
+    public boolean ackEnabled() { return true; }
+}
+```
+
+When such a message is published, the sender will wait for an ACK from the receiver. The receiver sends ACK automatically upon receipt — no extra code is needed in your handler.
+
+### Publishing with ACK
+
+```java
+// Will wait for ACK because CriticalEvent.ackEnabled() == true
+client.getRedisRouter()
+    .publish(new CriticalEvent("42"), receiver.platformEntity())
+    .thenRun(() -> System.out.println("ACK received"))
+    .exceptionally(err -> {
+        System.err.println("No ACK: " + err.getMessage());
+        return null;
+    });
+```
+
+If `ackEnabled()` returns `false` (default), `publish(...)` completes immediately after sending.
+
+### Timeouts and Errors
+
+- If no ACK is received within the configured timeout, the returned `CompletionStage` completes exceptionally with `NoAckException`.
+- Configure timeout via either:
+  - System property: `redisbridge.ack.timeout.seconds`
+  - Environment variable: `REDISBRIDGE_ACK_TIMEOUT_SECONDS`
+
+Example (Java):
+
+```java
+System.setProperty("redisbridge.ack.timeout.seconds", "2");
+```
+
+Notes:
+
+- ACK only confirms that the message reached the receiver’s Redis subscription; it does not indicate business-level processing success. Use the request-response pattern if you need a business response.
+- If you publish to a channel with no active receivers, an `ackEnabled()` message will time out with `NoAckException`.
 
 ## Core Concepts
 
