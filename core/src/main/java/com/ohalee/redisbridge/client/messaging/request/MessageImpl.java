@@ -31,4 +31,9 @@ public class MessageImpl<M extends BaseMessage> implements Message<M> {
     public @NotNull M message() {
         return this.message;
     }
+
+    @Override
+    public boolean ackRequested() {
+        return this.message.ackEnabled();
+    }
 }

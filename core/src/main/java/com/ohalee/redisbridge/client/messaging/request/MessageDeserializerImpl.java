@@ -42,6 +42,20 @@ public class MessageDeserializerImpl implements RedisMessageListener, MessageDes
         if (!this.channel.equals(channel)) return;
 
         JsonObject jsonMessage = GsonProvider.normal().fromJson(message, JsonObject.class);
+        if (jsonMessage.has("ack") && jsonMessage.get("ack").getAsBoolean()) {
+            try {
+                String id = jsonMessage.get("uniqueId").getAsString();
+                String senderId = jsonMessage.getAsJsonObject("sender").get("id").getAsString();
+
+                var ackPayload = new JsonObject();
+                ackPayload.addProperty("uniqueId", id);
+
+                this.pubSubConnection.async().publish(MessageEntity.ack(senderId).channel(), GsonProvider.normal().toJson(ackPayload));
+            } catch (Exception ignored) {
+                // Ignore malformed ack data to avoid breaking message handling
+            }
+        }
+
         JsonObject actionObj = jsonMessage.getAsJsonObject("message");
         String namespace = actionObj.get("namespace").getAsString();
 

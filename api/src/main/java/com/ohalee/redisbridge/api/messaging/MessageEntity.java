@@ -61,6 +61,26 @@ public interface MessageEntity {
     }
 
     /**
+     * Creates a message entity for sending an acknowledgement (ACK) back to the original message sender.
+     *
+     * @param serverID the unique identifier of the server to acknowledge
+     * @return a message entity targeting the specific sender's ACK channel
+     */
+    static @NotNull MessageEntity ack(@NotNull String serverID) {
+        return () -> PREFIX + ":ack:" + serverID.toLowerCase();
+    }
+
+    /**
+     * Creates a message entity for sending an acknowledgement (ACK) back to the original message sender.
+     *
+     * @param sender the original message sender
+     * @return a message entity targeting the specific sender's ACK channel
+     */
+    static @NotNull MessageEntity ack(@NotNull Sender sender) {
+        return ack(sender.id());
+    }
+
+    /**
      * Gets the Redis channel associated with this entity.
      *
      * @return The Redis channel name.

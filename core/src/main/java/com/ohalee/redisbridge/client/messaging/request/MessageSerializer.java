@@ -19,6 +19,7 @@ public class MessageSerializer implements JsonSerializer<Message<BaseMessage>>, 
     public JsonElement serialize(Message<BaseMessage> src, Type typeOfSrc, JsonSerializationContext context) {
         JsonObject json = new JsonObject();
         json.addProperty("uniqueId", src.uniqueId().toString());
+        json.addProperty("ack", src.ackRequested());
 
         JsonObject senderObject = new JsonObject();
         senderObject.addProperty("id", src.sender().id());

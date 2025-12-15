@@ -41,4 +41,13 @@ public interface Message<M extends BaseMessage> {
      */
     @NotNull M message();
 
+    /**
+     * Indicates whether the sender requested an acknowledgement (ACK) for this message.
+     * If true, the receiver should send an ACK back immediately upon receipt.
+     * Default is false.
+     */
+    default boolean ackRequested() {
+        return false;
+    }
+
 }

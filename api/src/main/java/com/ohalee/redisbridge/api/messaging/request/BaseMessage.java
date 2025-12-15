@@ -17,4 +17,15 @@ public interface BaseMessage {
 
     String namespace();
 
+    /**
+     * Whether this message requires an acknowledgement (ACK) from the receiver.
+     * Default is false.
+     *
+     * <p>If enabled, the sender will wait for an ACK on the dedicated ACK channel
+     * and fail the publish future if the ACK is not received within the configured timeout.</p>
+     */
+    default boolean ackEnabled() {
+        return false;
+    }
+
 }
