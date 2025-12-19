@@ -209,14 +209,21 @@ If `ackEnabled()` returns `false` (default), `publish(...)` completes immediatel
 ### Timeouts and Errors
 
 - If no ACK is received within the configured timeout, the returned `CompletionStage` completes exceptionally with `NoAckException`.
-- Configure timeout via either:
-  - System property: `redisbridge.ack.timeout.seconds`
-  - Environment variable: `REDISBRIDGE_ACK_TIMEOUT_SECONDS`
-
-Example (Java):
+- Configure timeout and other settings by overriding `routerSettings()` in your `RedisBridgeClient`:
 
 ```java
-System.setProperty("redisbridge.ack.timeout.seconds", "2");
+RedisBridgeClient client = new RedisBridgeClient() {
+    // ... other overrides
+
+    @Override
+    public MessageRouter.Settings routerSettings() {
+        return new MessageRouter.Settings(
+            true, // activeQueueExecutor
+            100,  // queuePublishDelayMillis
+            2     // ackTimeoutSeconds
+        );
+    }
+};
 ```
 
 Notes:
