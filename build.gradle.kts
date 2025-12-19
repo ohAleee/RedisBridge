@@ -6,7 +6,7 @@ plugins {
 }
 
 group = "com.ohalee.redis-bridge"
-version = "1.0.3"
+version = "1.0.4"
 
 allprojects {
     group = rootProject.group
