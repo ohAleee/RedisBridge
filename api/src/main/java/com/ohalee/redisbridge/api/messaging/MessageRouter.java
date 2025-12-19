@@ -1,9 +1,9 @@
 package com.ohalee.redisbridge.api.messaging;
 
-import com.ohalee.redisbridge.api.messaging.request.Message;
 import com.ohalee.redisbridge.api.messaging.request.BaseMessage;
-import com.ohalee.redisbridge.api.messaging.response.MessageResponse;
+import com.ohalee.redisbridge.api.messaging.request.Message;
 import com.ohalee.redisbridge.api.messaging.response.BaseResponse;
+import com.ohalee.redisbridge.api.messaging.response.MessageResponse;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.concurrent.CompletableFuture;
@@ -60,13 +60,6 @@ public interface MessageRouter {
     <M extends BaseMessage> CompletionStage<Message<M>> publishQueued(@NotNull M message, @NotNull MessageEntity receiver);
 
     /**
-     * Configures the interval for batched publishing.
-     *
-     * @param intervalMs the interval in milliseconds between batch publishes (default: 100ms)
-     */
-    void configureQueuedPublishing(long intervalMs);
-
-    /**
      * Publishes a message and waits for a response from the receiver.
      *
      * @param message  the message to publish
@@ -120,5 +113,31 @@ public interface MessageRouter {
      */
     default <M extends BaseMessage, R extends BaseResponse> void reply(Message<M> original, R callback) {
         this.publishResponse(original, callback, MessageEntity.response(original.sender()));
+    }
+
+    /**
+     * Settings for configuring the behavior of the MessageRouter.
+     *
+     * @param activeQueueExecutor     whether to enable the queued message executor
+     * @param queuePublishDelayMillis the delay in milliseconds between queued message batch publishes
+     * @param ackTimeoutSeconds       the timeout in seconds for acknowledging messages
+     */
+    record Settings(boolean activeQueueExecutor, int queuePublishDelayMillis, int ackTimeoutSeconds) {
+
+        public static final int DEFAULT_QUEUE_DELAY_MILLIS = 100;
+        public static final int DEFAULT_ACK_TIMEOUT_SECONDS = 5;
+
+        public Settings() {
+            this(true, DEFAULT_QUEUE_DELAY_MILLIS, DEFAULT_ACK_TIMEOUT_SECONDS);
+        }
+
+        /**
+         * Provides default settings for the MessageRouter.
+         *
+         * @return default Settings instance
+         */
+        public static Settings defaultSettings() {
+            return new Settings();
+        }
     }
 }

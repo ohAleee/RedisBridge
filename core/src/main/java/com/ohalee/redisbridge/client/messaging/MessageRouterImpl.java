@@ -17,6 +17,7 @@ import com.ohalee.redisbridge.client.util.GsonProvider;
 import io.lettuce.core.api.async.RedisAsyncCommands;
 import io.lettuce.core.pubsub.StatefulRedisPubSubConnection;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.UUID;
 import java.util.concurrent.*;
@@ -25,21 +26,28 @@ public class MessageRouterImpl implements MessageRouter {
 
     private final RedisBridgeClient redisBridgeClient;
     private final Sender sender;
+    private final Settings settings;
 
     private ResponseDeserializer responseDeserializer;
     private AckDeserializerImpl ackDeserializer;
     private StatefulRedisPubSubConnection<String, String> connection;
 
-    private ScheduledExecutorService queueExecutor;
     private final ConcurrentLinkedQueue<QueuedMessage<?>> messageQueue = new ConcurrentLinkedQueue<>();
-    private long queueIntervalMs = 100;
+    private @Nullable ScheduledExecutorService queueExecutor;
 
-    public MessageRouterImpl(RedisBridgeClient redisBridgeClient) {
+    public MessageRouterImpl(RedisBridgeClient redisBridgeClient, Settings settings) {
         this.redisBridgeClient = redisBridgeClient;
+        this.settings = settings;
         this.connection = this.redisBridgeClient.getRedis().pubSubConnection();
 
         this.sender = Sender.from(this.redisBridgeClient.serverID(), this.redisBridgeClient.platformEntity());
 
+        if (settings.activeQueueExecutor()) {
+            initializeQueueExecutor();
+        }
+    }
+
+    private void initializeQueueExecutor() {
         this.queueExecutor = Executors.newScheduledThreadPool(1, Thread.ofVirtual()
                 .name("RedisBridge-QueuePublisher")
                 .factory());
@@ -50,10 +58,12 @@ public class MessageRouterImpl implements MessageRouter {
         this.responseDeserializer = new ResponseDeserializerImpl(this.redisBridgeClient, connection, connection.async());
         this.responseDeserializer.load();
 
-        this.ackDeserializer = new AckDeserializerImpl(this.redisBridgeClient, connection);
+        this.ackDeserializer = new AckDeserializerImpl(this.redisBridgeClient, connection, settings.ackTimeoutSeconds());
         this.ackDeserializer.load();
 
-        this.queueExecutor.scheduleAtFixedRate(this::processBatchPublish, queueIntervalMs, queueIntervalMs, TimeUnit.MILLISECONDS);
+        if (this.queueExecutor != null) {
+            this.queueExecutor.scheduleAtFixedRate(this::processBatchPublish, settings.queuePublishDelayMillis(), settings.queuePublishDelayMillis(), TimeUnit.MILLISECONDS);
+        }
     }
 
     @Override
@@ -155,17 +165,16 @@ public class MessageRouterImpl implements MessageRouter {
 
     @Override
     public <T extends BaseMessage> CompletionStage<Message<T>> publishQueued(@NotNull T message, @NotNull MessageEntity receiver) {
+        if (this.queueExecutor == null) {
+            throw new IllegalStateException("Queue executor is not initialized. Enable activeQueueExecutor in RedisBridgeClient constructor.");
+        }
+
         MessageImpl<T> actionMessage = new MessageImpl<>(UUID.randomUUID(), this.sender, message);
         CompletableFuture<Message<T>> future = new CompletableFuture<>();
 
         messageQueue.offer(new QueuedMessage<>(actionMessage, receiver, future));
 
         return future;
-    }
-
-    @Override
-    public void configureQueuedPublishing(long intervalMs) {
-        this.queueIntervalMs = intervalMs;
     }
 
     @Override

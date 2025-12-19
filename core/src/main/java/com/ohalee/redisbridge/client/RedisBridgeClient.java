@@ -1,7 +1,7 @@
 package com.ohalee.redisbridge.client;
 
-import com.ohalee.redisbridge.api.messaging.MessageRouter;
 import com.ohalee.redisbridge.api.messaging.MessageEntity;
+import com.ohalee.redisbridge.api.messaging.MessageRouter;
 import com.ohalee.redisbridge.api.redis.RedisConnectionProvider;
 import com.ohalee.redisbridge.client.messaging.MessageRouterImpl;
 import com.ohalee.redisbridge.client.messaging.request.MessageDeserializerImpl;
@@ -38,7 +38,7 @@ public abstract class RedisBridgeClient {
 
         GsonProvider.initialize(this.registry);
 
-        this.redisRouter = new MessageRouterImpl(this);
+        this.redisRouter = new MessageRouterImpl(this, this.routerSettings());
         this.redisListener = new MessageDeserializerImpl(this.executorService, this.redis.pubSubConnection(), this.platformEntity(), this.registry);
 
         this.redisRouter.load();
@@ -60,4 +60,7 @@ public abstract class RedisBridgeClient {
 
     protected abstract RedisConnectionProvider provideRedisConnector();
 
+    public MessageRouter.Settings routerSettings() {
+        return MessageRouter.Settings.defaultSettings();
+    }
 }

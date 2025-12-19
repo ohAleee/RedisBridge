@@ -30,12 +30,9 @@ public class AckDeserializerImpl implements RedisMessageListener {
     private final String channel;
     private final StatefulRedisPubSubConnection<String, String> pubSubConnection;
 
-    public AckDeserializerImpl(RedisBridgeClient client, StatefulRedisPubSubConnection<String, String> pubSubConnection) {
+    public AckDeserializerImpl(RedisBridgeClient client, StatefulRedisPubSubConnection<String, String> pubSubConnection, int timeoutSeconds) {
         this.channel = MessageEntity.ack(client.serverID()).channel();
         this.pubSubConnection = pubSubConnection;
-
-        int timeoutSeconds = Integer.getInteger("redisbridge.ack.timeout.seconds",
-                Integer.parseInt(System.getenv().getOrDefault("REDISBRIDGE_ACK_TIMEOUT_SECONDS", "5")));
 
         this.ackCallbacks = CaffeineFactory.newBuilder()
                 .expireAfterWrite(timeoutSeconds, TimeUnit.SECONDS)
