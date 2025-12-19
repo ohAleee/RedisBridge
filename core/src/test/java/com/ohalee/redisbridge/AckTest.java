@@ -1,6 +1,7 @@
 package com.ohalee.redisbridge;
 
 import com.ohalee.redisbridge.api.messaging.MessageEntity;
+import com.ohalee.redisbridge.api.messaging.MessageRouter;
 import com.ohalee.redisbridge.api.messaging.ack.exception.NoAckException;
 import com.ohalee.redisbridge.api.messaging.request.Message;
 import com.ohalee.redisbridge.api.redis.RedisConnectionProvider;
@@ -10,7 +11,9 @@ import com.ohalee.redisbridge.models.TestBaseMessage;
 import com.ohalee.redisbridge.redis.TestRedisClient;
 import org.junit.jupiter.api.*;
 
-import java.util.concurrent.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -18,13 +21,9 @@ import static org.junit.jupiter.api.Assertions.*;
 public class AckTest {
 
     private RedisBridgeClient client;
-    private String previousTimeoutProp;
 
     @BeforeAll
     void setUp() {
-        previousTimeoutProp = System.getProperty("redisbridge.ack.timeout.seconds");
-        System.setProperty("redisbridge.ack.timeout.seconds", "3");
-
         client = new RedisBridgeClient() {
             @Override
             public String serverID() {
@@ -34,6 +33,11 @@ public class AckTest {
             @Override
             protected RedisConnectionProvider provideRedisConnector() {
                 return new TestRedisClient("redis-bridge-ack-test");
+            }
+
+            @Override
+            public MessageRouter.Settings routerSettings() {
+                return new MessageRouter.Settings(false, -1, 3);
             }
         };
 
@@ -52,12 +56,6 @@ public class AckTest {
     void tearDown() {
         if (client != null) {
             client.unload();
-        }
-
-        if (previousTimeoutProp == null) {
-            System.clearProperty("redisbridge.ack.timeout.seconds");
-        } else {
-            System.setProperty("redisbridge.ack.timeout.seconds", previousTimeoutProp);
         }
     }
 
