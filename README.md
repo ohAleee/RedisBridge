@@ -183,6 +183,27 @@ client.getRedisRouter().waitResponse(
 });
 ```
 
+#### Wait for Multiple Responses
+
+When broadcasting a message to multiple clients, you can wait for a variable number of responses. The router will track how many clients received the broadcast and dynamically set the expected response count.
+
+```java
+client.getRedisRouter().waitResponses(
+        new UserLoginMessage("john_doe", System.currentTimeMillis()),
+        MessageEntity.broadcast("updates"),
+        true // includeSender: whether to include the local sender in the expected response count
+).thenAccept(fullResponses -> {
+    System.out.println("Received " + fullResponses.size() + " responses!");
+    for (PacketResponse<UserLoginMessage, LoginResponse> fullResponse : fullResponses) {
+        System.out.println("Response: " + fullResponse.response().token());
+    }
+})
+.exceptionally(throwable -> {
+    System.err.println("Error: " + throwable.getMessage());
+    return null;
+});
+```
+
 ## Interceptors
 
 You can register interceptors to hook into the message lifecycle (before sending and after receiving). This is useful
