@@ -4,6 +4,7 @@ import com.ohalee.redisbridge.api.messaging.request.Message;
 import com.ohalee.redisbridge.api.messaging.request.Packet;
 import org.jetbrains.annotations.NotNull;
 
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
@@ -37,6 +38,16 @@ public interface ResponseReceptionHandler {
     <T extends Message, C extends Response> CompletableFuture<PacketResponse<T, C>> handle(CompletableFuture<Packet<T>> message);
 
     /**
+     * Registers interest in multiple responses for the given message packet.
+     *
+     * @param message the message packet
+     * @param <T>     the message type
+     * @param <C>     the response type
+     * @return a collector that can wait for multiple responses
+     */
+    <T extends Message, C extends Response> MultiResponseCollector<T, C> handleMultiple(@NotNull Packet<T> message);
+
+    /**
      * Cancels and completes exceptionally any pending response future bound to the
      * unique id.
      *
@@ -45,4 +56,8 @@ public interface ResponseReceptionHandler {
      */
     void cancel(@NotNull UUID uniqueId, @NotNull Throwable cause);
 
+    interface MultiResponseCollector<T extends Message, C extends Response> {
+        CompletableFuture<List<PacketResponse<T, C>>> getFuture();
+        void setExpectedResponses(int count);
+    }
 }

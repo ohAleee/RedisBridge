@@ -1,5 +1,6 @@
 package com.ohalee.redisbridge;
 
+import com.ohalee.redisbridge.api.messaging.MessageEntity;
 import com.ohalee.redisbridge.api.messaging.response.PacketResponse;
 import com.ohalee.redisbridge.api.redis.RedisConnectionProvider;
 import com.ohalee.redisbridge.client.RedisBridgeClient;
@@ -31,6 +32,10 @@ public class MessageRouterTest {
                 return new TestRedisClient("redis-bridge-router-test");
             }
         };
+
+        client.initialize();
+
+        client.getRedisListener().subscribe(MessageEntity.broadcast("test"));
 
         client.load();
     }
@@ -98,5 +103,30 @@ public class MessageRouterTest {
 
         var result = future.get(5, TimeUnit.SECONDS);
         assertNotNull(result);
+    }
+
+    @Test
+    @DisplayName("Should wait for multiple responses and receive them")
+    void testWaitForMultipleResponses() throws InterruptedException, ExecutionException, TimeoutException {
+        client.getMessageRegistry()
+                .register(TestMessage.class, TestResponse.class)
+                .onReceive(fullMessage -> {
+                    TestResponse response = new TestResponse("Multi-response to: " + fullMessage.message().content());
+
+                    client.getRedisRouter().reply(fullMessage, response);
+                })
+                .build();
+
+        CompletableFuture<java.util.List<PacketResponse<TestMessage, TestResponse>>> future = client.getRedisRouter()
+                .waitResponses(
+                        new TestMessage("multi-request"),
+                        MessageEntity.broadcast("test"),
+                        true
+                );
+
+        var result = future.get(5, TimeUnit.SECONDS);
+        assertNotNull(result);
+        assertEquals(1, result.size());
+        assertEquals("Multi-response to: multi-request", result.getFirst().response().response());
     }
 }

@@ -6,6 +6,7 @@ import com.ohalee.redisbridge.api.messaging.response.PacketResponse;
 import com.ohalee.redisbridge.api.messaging.response.Response;
 import org.jetbrains.annotations.NotNull;
 
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
 /**
@@ -60,6 +61,22 @@ public interface MessageRouter {
     <M extends Message, R extends Response> CompletableFuture<PacketResponse<M, R>> waitResponse(@NotNull M message, @NotNull MessageEntity receiver);
 
     /**
+     * Publishes a message and waits for multiple responses from the receivers.
+     * Note that this will only wait for responses from clients who received the message.
+     * If includeSender is false, the sender will be excluded from the response count.
+     * This method is useful for broadcasting a message to multiple clients and collecting
+     * their responses without needing to know the exact number of recipients in advance.
+     *
+     * @param message       the message to publish
+     * @param receiver      the entity that should receive the message and send a response
+     * @param includeSender whether to include the sender in the response count
+     * @param <M>           the message type
+     * @param <R>           the response type
+     * @return a future containing a list of full message responses
+     */
+    <M extends Message, R extends Response> CompletableFuture<List<PacketResponse<M, R>>> waitResponses(@NotNull M message, @NotNull MessageEntity receiver, boolean includeSender);
+
+    /**
      * Publishes a complete message response to a receiver.
      *
      * @param messageResponse the full message response to publish
@@ -96,7 +113,7 @@ public interface MessageRouter {
      * Settings for configuring the behavior of the MessageRouter.
      *
      * @param activeQueueExecutor     whether to enable the queued message executor
-     * @param queuePublishDelayMillis the delay in milliseconds between queued message batch publishes
+     * @param queuePublishDelayMillis the delay in milliseconds between queued message batch publications
      * @param ackTimeoutSeconds       the timeout in seconds for acknowledging messages
      * @param responseTimeoutSeconds  the timeout in seconds for waiting for message responses
      */

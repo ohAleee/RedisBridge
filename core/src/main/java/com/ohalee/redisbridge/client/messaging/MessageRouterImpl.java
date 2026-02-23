@@ -19,6 +19,7 @@ import io.lettuce.core.pubsub.StatefulRedisPubSubConnection;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.*;
 
@@ -218,6 +219,8 @@ public class MessageRouterImpl implements MessageRouter {
                 .whenComplete((count, throwable) -> {
                     if (throwable != null) {
                         this.responseReceptionHandler.cancel(finalPacket.uniqueId(), throwable);
+                    } else if (count == null || count == 0) {
+                        this.responseReceptionHandler.cancel(finalPacket.uniqueId(), new IllegalStateException("No subscribers received the message: " + finalPacket));
                     }
                 });
 
@@ -230,6 +233,43 @@ public class MessageRouterImpl implements MessageRouter {
         }
 
         return responseFuture;
+    }
+
+    @Override
+    public <M extends Message, R extends Response> CompletableFuture<List<PacketResponse<M, R>>> waitResponses(@NotNull M message, @NotNull MessageEntity receiver, boolean includeSender) {
+        Packet<M> packet = new PacketImpl<>(UUID.randomUUID(), this.sender, message);
+
+        for (MessageInterceptor interceptor : this.redisBridgeClient.interceptors()) {
+            packet = interceptor.onSend(packet);
+        }
+
+        // Register response future immediately to avoid race conditions with ACK
+        ResponseReceptionHandler.MultiResponseCollector<M, R> collector = this.responseReceptionHandler.handleMultiple(packet);
+
+        String jsonMessage = this.messagingService.serialize(packet);
+        final Packet<M> finalPacket = packet;
+        this.connection.async().publish(receiver.channel(), jsonMessage)
+                .whenComplete((count, throwable) -> {
+                    int expectedCount = (count != null ? count.intValue() : 0) - (includeSender ? 0 : 1);
+
+                    if (throwable != null) {
+                        this.responseReceptionHandler.cancel(finalPacket.uniqueId(), throwable);
+                    } else if (expectedCount <= 0) {
+                        this.responseReceptionHandler.cancel(finalPacket.uniqueId(), new IllegalStateException("No subscribers received the message: " + finalPacket));
+                    } else {
+                        collector.setExpectedResponses(expectedCount);
+                    }
+                });
+
+        if (packet.ackRequested()) {
+            this.ackDeserializer.expectAck(packet.uniqueId())
+                    .exceptionally(throwable -> {
+                        this.responseReceptionHandler.cancel(finalPacket.uniqueId(), throwable);
+                        return null;
+                    });
+        }
+
+        return collector.getFuture();
     }
 
     private record QueuedMessage<T extends Message>(Packet<T> message, MessageEntity receiver, CompletableFuture<Packet<T>> future) {
