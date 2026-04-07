@@ -6,12 +6,13 @@ import com.ohalee.redisbridge.api.messaging.response.ResponseMessageHandler;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executor;
 
 public class MessageRegistryImpl implements MessageRegistry {
 
-    private final Map<String, MessageRegistration> registrations = new HashMap<>();
+    private final Map<String, MessageRegistration> registrations = new ConcurrentHashMap<>();
 
     @Override
     public @NotNull <M extends Message> RegistrationBuilder<M> register(@NotNull String namespace, @NotNull Class<M> messageClass) {
@@ -51,24 +52,39 @@ public class MessageRegistryImpl implements MessageRegistry {
 
         @Override
         public @NotNull RegistrationBuilder<M> onReceive(@NotNull VoidMessageHandler<M> handler) {
+            if (this.handler != null) {
+                throw new IllegalStateException("Handler already set for this message");
+            }
             this.handler = handler;
+            return this;
+        }
+
+        @Override
+        public @NotNull RegistrationBuilder<M> onReceive(@NotNull VoidMessageHandler<M> handler, @NotNull Executor executor) {
+            if (this.handler != null) {
+                throw new IllegalStateException("Handler already set for this message");
+            }
+            this.handler = message -> executor.execute(() -> handler.handle(message));
             return this;
         }
 
         @Override
         public void build() {
             MessageHandler<M> wrappedHandler = message -> {
-                if (handler != null) {
-                    handler.handle(message);
+                if (this.handler != null) {
+                    this.handler.handle(message);
                 }
             };
 
             MessageRegistrationImpl registration = MessageRegistrationImpl.builder()
-                    .namespace(namespace)
-                    .messageClass(messageClass)
+                    .namespace(this.namespace)
+                    .messageClass(this.messageClass)
                     .handler(wrappedHandler)
                     .build();
-            registrations.put(namespace, registration);
+
+            if (registrations.putIfAbsent(this.namespace, registration) != null) {
+                throw new IllegalStateException("A registration for namespace '" + this.namespace + "' already exists.");
+            }
         }
     }
 
@@ -90,13 +106,37 @@ public class MessageRegistryImpl implements MessageRegistry {
 
         @Override
         public @NotNull RegistrationBuilderWithResponse<M, R> onReceive(@NotNull MessageHandler<M> handler) {
+            if (this.handler != null) {
+                throw new IllegalStateException("Handler already set for this message");
+            }
             this.handler = handler;
             return this;
         }
 
         @Override
+        public @NotNull RegistrationBuilderWithResponse<M, R> onReceive(@NotNull MessageHandler<M> handler, @NotNull Executor executor) {
+            if (this.handler != null) {
+                throw new IllegalStateException("Handler already set for this message");
+            }
+            this.handler = message -> executor.execute(() -> handler.handle(message));
+            return this;
+        }
+
+        @Override
         public @NotNull RegistrationBuilderWithResponse<M, R> onResponse(@NotNull ResponseMessageHandler<M, R> responseHandler) {
+            if (this.responseHandler != null) {
+                throw new IllegalStateException("Response handler already set for this message");
+            }
             this.responseHandler = responseHandler;
+            return this;
+        }
+
+        @Override
+        public @NotNull RegistrationBuilderWithResponse<M, R> onResponse(@NotNull ResponseMessageHandler<M, R> responseHandler, @NotNull Executor executor) {
+            if (this.responseHandler != null) {
+                throw new IllegalStateException("Response handler already set for this message");
+            }
+            this.responseHandler = (packet) -> executor.execute(() -> responseHandler.handleResponse(packet));
             return this;
         }
 
@@ -109,7 +149,10 @@ public class MessageRegistryImpl implements MessageRegistry {
                     .handler(this.handler)
                     .responseHandler(this.responseHandler)
                     .build();
-            registrations.put(this.namespace, registration);
+
+            if (registrations.putIfAbsent(this.namespace, registration) != null) {
+                throw new IllegalStateException("A registration for namespace '" + this.namespace + "' already exists.");
+            }
         }
     }
 

@@ -5,6 +5,8 @@ import com.ohalee.redisbridge.api.messaging.response.ResponseMessageHandler;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.concurrent.Executor;
+
 /**
  * Registry for managing message handler registrations and subscriptions.
  *
@@ -159,6 +161,16 @@ public interface MessageRegistry {
         RegistrationBuilder<M> onReceive(@NotNull VoidMessageHandler<M> handler);
 
         /**
+         * Set the handler for when this message is received, to be executed on a specific executor
+         *
+         * @param handler  the handler
+         * @param executor the custom executor to run the handler on
+         * @return this builder for chaining
+         */
+        @NotNull
+        RegistrationBuilder<M> onReceive(@NotNull VoidMessageHandler<M> handler, @NotNull Executor executor);
+
+        /**
          * Complete the registration
          */
         void build();
@@ -178,6 +190,16 @@ public interface MessageRegistry {
         RegistrationBuilderWithResponse<M, R> onReceive(@NotNull MessageHandler<M> handler);
 
         /**
+         * Set the handler for when this message is received, to be executed on a specific executor
+         *
+         * @param handler  the handler
+         * @param executor the custom executor to run the handler on
+         * @return this builder for chaining
+         */
+        @NotNull
+        RegistrationBuilderWithResponse<M, R> onReceive(@NotNull MessageHandler<M> handler, @NotNull Executor executor);
+
+        /**
          * Set the handler for when a response to this message is received
          *
          * @param handler the response handler
@@ -187,9 +209,18 @@ public interface MessageRegistry {
         RegistrationBuilderWithResponse<M, R> onResponse(@NotNull ResponseMessageHandler<M, R> handler);
 
         /**
+         * Set the handler for when a response to this message is received, to be executed on a specific executor
+         *
+         * @param handler  the response handler
+         * @param executor the custom executor to run the handler on
+         * @return this builder for chaining
+         */
+        @NotNull
+        RegistrationBuilderWithResponse<M, R> onResponse(@NotNull ResponseMessageHandler<M, R> handler, @NotNull Executor executor);
+
+        /**
          * Complete the registration
          */
         void build();
     }
-
 }
