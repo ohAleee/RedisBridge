@@ -187,6 +187,8 @@ client.getRedisRouter().waitResponse(
 
 When broadcasting a message to multiple clients, you can wait for a variable number of responses. The router will track how many clients received the broadcast and dynamically set the expected response count.
 
+> **Timeout behavior:** if the response timeout elapses before every expected response arrives, the future completes with the responses collected so far rather than failing. It only completes exceptionally with `NoResponseException` when no responses were received at all.
+
 ```java
 client.getRedisRouter().waitResponses(
         new UserLoginMessage("john_doe", System.currentTimeMillis()),
@@ -346,6 +348,12 @@ The registry manages message handler registrations:
 
 - `register(messageClass)` - For messages without responses
 - `register(messageClass, responseClass)` - For request-response pattern
+
+> **Note:** clients created without an explicit registry share a single JVM-wide
+> default (`RedisBridgeClient.MESSAGE_REGISTRY`), so namespaces are global across
+> all such clients in the same JVM and registering the same namespace twice throws.
+> To isolate registrations per client, pass your own registry via
+> `RedisBridgeClient.builder().messageRegistry(...)`.
 
 ### MessageRouter
 

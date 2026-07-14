@@ -30,8 +30,12 @@ public interface RequestReceptionHandler {
     /**
      * Parses a full message from its JSON representation.
      *
+     * <p>The concrete payload type is resolved from the registered namespace embedded
+     * in the JSON, so {@code clazz} serves only as a compile-time hint for the returned
+     * generic type and does not influence deserialization.</p>
+     *
      * @param jsonMessage The JSON object representing the full message
-     * @param clazz       The class type of the message payload
+     * @param clazz       The expected message payload type (compile-time hint only)
      * @param <T>         The type of the message payload
      * @return The reconstructed full message object
      */

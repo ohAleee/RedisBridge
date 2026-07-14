@@ -8,7 +8,7 @@ package com.ohalee.redisbridge.api.messaging.request;
  * <p><b>Usage Example:</b></p>
  * <pre>{@code
  * @MessageName("user:login")
- * public record UserLoginMessage(String username, long timestamp) implements Packet {}
+ * public record UserLoginMessage(String username, long timestamp) implements Message {}
  * }</pre>
  *
  * @see Packet

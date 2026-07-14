@@ -27,6 +27,16 @@ public abstract class BaseRedisClient implements RedisConnectionProvider {
     }
 
     @Override
+    public void returnConnection(StatefulRedisConnection<String, String> connection) {
+        if (this.pool == null || connection == null) return;
+        try {
+            this.pool.returnObject(connection);
+        } catch (Exception e) {
+            connection.close();
+        }
+    }
+
+    @Override
     public StatefulRedisPubSubConnection<String, String> pubSubConnection() {
         return this.pubSubConnection;
     }

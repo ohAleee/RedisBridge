@@ -22,8 +22,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.*;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 public class ResponseReceptionHandlerImpl extends AbstractMessageHandler implements ResponseReceptionHandler {
+
+    private static final Logger LOGGER = Logger.getLogger("RedisBridge-Response-Handler");
 
     private final Map<UUID, CompletableFuture<?>> waitingResponse = new ConcurrentHashMap<>();
     private final Map<UUID, MultiResponseCollectorImpl<?, ?>> waitingMultiResponse = new ConcurrentHashMap<>();
@@ -33,6 +37,7 @@ public class ResponseReceptionHandlerImpl extends AbstractMessageHandler impleme
     private final StatefulRedisPubSubConnection<String, String> connection;
     private final RedisPubSubAsyncCommands<String, String> commands;
     private final int responseTimeoutSeconds;
+    private boolean loaded;
 
     public ResponseReceptionHandlerImpl(RedisBridgeClient client, ExecutorService executorService,
                                         StatefulRedisPubSubConnection<String, String> connection, RedisPubSubAsyncCommands<String, String> commands,
@@ -49,13 +54,17 @@ public class ResponseReceptionHandlerImpl extends AbstractMessageHandler impleme
     }
 
     @Override
-    public void load() {
+    public synchronized void load() {
+        if (this.loaded) return;
+        this.loaded = true;
         this.connection.addListener(this);
         this.commands.subscribe(this.channel);
     }
 
     @Override
-    public void unload() {
+    public synchronized void unload() {
+        if (!this.loaded) return;
+        this.loaded = false;
         this.connection.removeListener(this);
         this.commands.unsubscribe(this.channel);
         this.waitingResponse.clear();
@@ -67,29 +76,35 @@ public class ResponseReceptionHandlerImpl extends AbstractMessageHandler impleme
     protected void handleIncomingMessage(String channel, String message) {
         if (!this.channel.equals(channel)) return;
 
-        PacketResponse<?, ?> response = this.messagingService.deserialize(message, PacketResponseImpl.class);
-        Packet<?> packet = response.packet();
+        try {
+            PacketResponse<?, ?> response = this.messagingService.deserialize(message, PacketResponseImpl.class);
+            Packet<?> packet = response.packet();
 
-        String namespace = MessageRegistry.getNamespace(packet.message());
-        MessageRegistration registration = this.messageRegistry.getRegistration(namespace);
+            String namespace = MessageRegistry.getNamespace(packet.message());
+            MessageRegistration registration = this.messageRegistry.getRegistration(namespace);
 
-        if (registration == null || !registration.expectsResponse())
-            throw new IllegalStateException("Received a response for unregistered message namespace " + namespace);
+            if (registration == null || !registration.expectsResponse()) {
+                LOGGER.log(Level.WARNING, "Received a response for unregistered message namespace {0}", namespace);
+                return;
+            }
 
-        ResponseMessageHandler<Message, Response> handler = registration.responseHandler();
-        if (handler != null) {
-            handler.handleResponse((PacketResponse<Message, Response>) response);
-        }
+            ResponseMessageHandler<Message, Response> handler = registration.responseHandler();
+            if (handler != null) {
+                handler.handleResponse((PacketResponse<Message, Response>) response);
+            }
 
-        CompletableFuture<PacketResponse<Message, Response>> future = (CompletableFuture<PacketResponse<Message, Response>>) this.waitingResponse.remove(packet.uniqueId());
-        if (future != null) {
-            future.complete((PacketResponse<Message, Response>) response);
-            return;
-        }
+            CompletableFuture<PacketResponse<Message, Response>> future = (CompletableFuture<PacketResponse<Message, Response>>) this.waitingResponse.remove(packet.uniqueId());
+            if (future != null) {
+                future.complete((PacketResponse<Message, Response>) response);
+                return;
+            }
 
-        MultiResponseCollectorImpl<Message, Response> multiCollector = (MultiResponseCollectorImpl<Message, Response>) this.waitingMultiResponse.get(packet.uniqueId());
-        if (multiCollector != null) {
-            multiCollector.addResponse((PacketResponse<Message, Response>) response);
+            MultiResponseCollectorImpl<Message, Response> multiCollector = (MultiResponseCollectorImpl<Message, Response>) this.waitingMultiResponse.get(packet.uniqueId());
+            if (multiCollector != null) {
+                multiCollector.addResponse((PacketResponse<Message, Response>) response);
+            }
+        } catch (Exception e) {
+            LOGGER.log(Level.SEVERE, "Error processing incoming response message", e);
         }
     }
 
@@ -113,14 +128,30 @@ public class ResponseReceptionHandlerImpl extends AbstractMessageHandler impleme
     @Override
     public <M extends Message, R extends Response> MultiResponseCollector<M, R> handleMultiple(@NotNull Packet<M> message) {
         MultiResponseCollectorImpl<M, R> collector = new MultiResponseCollectorImpl<>();
-        CompletableFuture<List<PacketResponse<M, R>>> future = collector.getFuture()
-                .orTimeout(this.responseTimeoutSeconds, TimeUnit.SECONDS)
-                .exceptionallyCompose(throwable -> {
-                    this.waitingMultiResponse.remove(message.uniqueId());
-                    return CompletableFuture.failedFuture(throwable instanceof TimeoutException ? new NoResponseException() : throwable);
+        CompletableFuture<List<PacketResponse<M, R>>> resultFuture = collector.getFuture();
+
+        // On timeout, complete with whatever responses were collected so far; only fail
+        // with NoResponseException when nothing at all was received.
+        CompletableFuture<Void> timeoutGuard = new CompletableFuture<>();
+        timeoutGuard.orTimeout(this.responseTimeoutSeconds, TimeUnit.SECONDS)
+                .exceptionally(throwable -> {
+                    if (throwable instanceof TimeoutException) {
+                        List<PacketResponse<M, R>> partial = collector.snapshot();
+                        if (partial.isEmpty()) {
+                            resultFuture.completeExceptionally(new NoResponseException());
+                        } else {
+                            resultFuture.complete(partial);
+                        }
+                    }
+                    return null;
                 });
 
-        future.whenComplete((res, err) -> this.waitingMultiResponse.remove(message.uniqueId()));
+        // Stop the timeout from firing once the result is settled (normally, on error, or via cancel).
+        resultFuture.whenComplete((res, err) -> {
+            this.waitingMultiResponse.remove(message.uniqueId());
+            timeoutGuard.complete(null);
+        });
+
         this.waitingMultiResponse.put(message.uniqueId(), collector);
         return collector;
     }
@@ -157,6 +188,13 @@ public class ResponseReceptionHandlerImpl extends AbstractMessageHandler impleme
         @Override
         public CompletableFuture<List<PacketResponse<M, R>>> getFuture() {
             return this.future;
+        }
+
+        /**
+         * Returns a snapshot copy of the responses collected so far.
+         */
+        public synchronized List<PacketResponse<M, R>> snapshot() {
+            return new ArrayList<>(this.responses);
         }
 
         private void checkCompletion() {
