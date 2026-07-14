@@ -1,5 +1,4 @@
 [versions]
-shadow = "8.3.8"
 lombok-plugin = "9.0.0"
 
 lettuce = "6.8.1.RELEASE"
@@ -9,7 +8,6 @@ gson = "2.13.2"
 jetbrains-annotations = "26.0.2-1"
 
 [plugins]
-shadow = { id = "com.gradleup.shadow", version.ref = "shadow" }
 lombok = { id = "io.freefair.lombok", version.ref = "lombok-plugin" }
 
 [libraries]

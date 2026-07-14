@@ -21,6 +21,7 @@ public class RequestReceptionHandlerImpl extends AbstractMessageHandler implemen
     private final MessageRegistry messageRegistry;
     private final RedisMessagingService messagingService;
     private final StatefulRedisPubSubConnection<String, String> pubSubConnection;
+    private boolean loaded;
 
     public RequestReceptionHandlerImpl(RedisBridgeClient client, ExecutorService executorService, StatefulRedisPubSubConnection<String, String> pubSubConnection) {
         super(client, executorService);
@@ -30,13 +31,17 @@ public class RequestReceptionHandlerImpl extends AbstractMessageHandler implemen
     }
 
     @Override
-    public void load() {
+    public synchronized void load() {
+        if (this.loaded) return;
+        this.loaded = true;
         this.pubSubConnection.addListener(this);
         this.pubSubConnection.async().subscribe(this.subscribedChannels().toArray(new String[0]));
     }
 
     @Override
-    public void unload() {
+    public synchronized void unload() {
+        if (!this.loaded) return;
+        this.loaded = false;
         this.pubSubConnection.removeListener(this);
         this.pubSubConnection.async().unsubscribe(this.subscribedChannels().toArray(new String[0]));
     }
@@ -86,7 +91,7 @@ public class RequestReceptionHandlerImpl extends AbstractMessageHandler implemen
             var ackPayload = new JsonObject();
             ackPayload.addProperty("uniqueId", id);
 
-            this.pubSubConnection.async()
+            this.client.getPublisher()
                     .publish(MessageEntity.ack(senderId).channel(), this.messagingService.serialize(ackPayload))
                     .exceptionally(throwable -> {
                         LOGGER.log(Level.WARNING, "Failed to send ACK for message " + id, throwable);

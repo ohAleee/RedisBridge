@@ -1,6 +1,5 @@
 plugins {
     java
-    alias(libs.plugins.shadow) apply false
     alias(libs.plugins.lombok) apply false
     id("com.vanniktech.maven.publish") version "0.34.0" apply false
 }

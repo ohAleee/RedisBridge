@@ -10,33 +10,48 @@ import com.ohalee.redisbridge.client.messaging.MessageRouterImpl;
 import com.ohalee.redisbridge.client.messaging.RedisMessagingService;
 import com.ohalee.redisbridge.client.messaging.request.MessageRegistryImpl;
 import com.ohalee.redisbridge.client.messaging.request.RequestReceptionHandlerImpl;
+import com.ohalee.redisbridge.client.redis.RedisPublisher;
 import lombok.AccessLevel;
 import lombok.Getter;
 
 import java.lang.reflect.Type;
-import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 @Getter
 public abstract class RedisBridgeClient {
 
+    /**
+     * The shared, JVM-wide default {@link MessageRegistry}.
+     *
+     * <p><b>Note:</b> every client created without an explicit registry shares this
+     * single instance, so message namespaces are global across all such clients in
+     * the same JVM. Register a namespace only once; registering the same namespace
+     * twice throws {@link IllegalStateException}. To isolate registrations per client,
+     * supply your own registry via {@link Builder#messageRegistry(MessageRegistry)}.</p>
+     */
     public static final MessageRegistry MESSAGE_REGISTRY = new MessageRegistryImpl();
 
     private final MessageRegistry messageRegistry;
     private final RedisMessagingService messagingService;
 
     @Getter(AccessLevel.NONE)
-    private final List<MessageInterceptor> interceptors = new ArrayList<>();
+    private final List<MessageInterceptor> interceptors = new CopyOnWriteArrayList<>();
 
     private final ExecutorService executorService;
 
     private RedisConnectionProvider redis;
+    private RedisPublisher publisher;
     private RequestReceptionHandler redisListener;
     private MessageRouter redisRouter;
+
+    @Getter(AccessLevel.NONE)
+    private volatile boolean loaded;
 
     public RedisBridgeClient() {
         this(Executors.newVirtualThreadPerTaskExecutor());
@@ -72,18 +87,23 @@ public abstract class RedisBridgeClient {
      * @return the list of interceptors
      */
     public List<MessageInterceptor> interceptors() {
-        return this.interceptors;
+        return Collections.unmodifiableList(this.interceptors);
     }
 
     public void initialize() {
         this.redis = provideRedisConnector();
         this.redis.connect();
 
+        this.publisher = new RedisPublisher(this.redis);
         this.redisRouter = new MessageRouterImpl(this, this.routerSettings());
         this.redisListener = new RequestReceptionHandlerImpl(this, this.executorService, this.redis.pubSubConnection());
     }
 
     public void load() {
+        if (this.loaded) {
+            return;
+        }
+
         if (this.redis == null) {
             initialize();
         }
@@ -92,9 +112,15 @@ public abstract class RedisBridgeClient {
 
         this.redisRouter.load();
         this.redisListener.load();
+        this.loaded = true;
     }
 
     public void unload() {
+        if (!this.loaded) {
+            return;
+        }
+        this.loaded = false;
+
         if (this.redisListener != null) {
             this.redisListener.unload();
         }

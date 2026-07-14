@@ -38,9 +38,28 @@ public interface RedisConnectionProvider {
     /**
      * Retrieves a stateful Redis connection for executing commands.
      *
+     * <p>Implementations backed by a connection pool return a borrowed connection
+     * that should be handed back through {@link #returnConnection(StatefulRedisConnection)}
+     * once the caller is done with it.</p>
+     *
      * @return a {@link StatefulRedisConnection} instance
      */
     StatefulRedisConnection<String, String> connection();
+
+    /**
+     * Returns a connection previously obtained from {@link #connection()}.
+     *
+     * <p>Pool-backed implementations should return the connection to the pool.
+     * The default implementation simply closes it, which is appropriate for
+     * providers that create a fresh connection per {@link #connection()} call.</p>
+     *
+     * @param connection the connection to release
+     */
+    default void returnConnection(StatefulRedisConnection<String, String> connection) {
+        if (connection != null) {
+            connection.close();
+        }
+    }
 
     /**
      * Retrieves a stateful Redis pub/sub connection for subscribing and publishing messages.

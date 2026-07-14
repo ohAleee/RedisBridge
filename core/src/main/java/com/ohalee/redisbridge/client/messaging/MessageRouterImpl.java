@@ -14,7 +14,7 @@ import com.ohalee.redisbridge.client.messaging.ack.AckDeserializerImpl;
 import com.ohalee.redisbridge.client.messaging.request.PacketImpl;
 import com.ohalee.redisbridge.client.messaging.response.PacketResponseImpl;
 import com.ohalee.redisbridge.client.messaging.response.ResponseReceptionHandlerImpl;
-import io.lettuce.core.api.async.RedisAsyncCommands;
+import com.ohalee.redisbridge.client.redis.RedisPublisher;
 import io.lettuce.core.pubsub.StatefulRedisPubSubConnection;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -27,6 +27,7 @@ public class MessageRouterImpl implements MessageRouter {
 
     private final RedisBridgeClient redisBridgeClient;
     private final RedisMessagingService messagingService;
+    private final RedisPublisher publisher;
     private final Sender sender;
     private final Settings settings;
     private final ConcurrentLinkedQueue<QueuedMessage<?>> messageQueue = new ConcurrentLinkedQueue<>();
@@ -34,10 +35,12 @@ public class MessageRouterImpl implements MessageRouter {
     private AckDeserializerImpl ackDeserializer;
     private StatefulRedisPubSubConnection<String, String> connection;
     private @Nullable ScheduledExecutorService queueExecutor;
+    private boolean loaded;
 
     public MessageRouterImpl(RedisBridgeClient client, Settings settings) {
         this.redisBridgeClient = client;
         this.messagingService = client.getMessagingService();
+        this.publisher = client.getPublisher();
         this.settings = settings;
         this.connection = this.redisBridgeClient.getRedis().pubSubConnection();
         this.sender = Sender.from(this.redisBridgeClient.clientId(), this.redisBridgeClient.platformEntity());
@@ -54,11 +57,14 @@ public class MessageRouterImpl implements MessageRouter {
     }
 
     @Override
-    public void load() {
+    public synchronized void load() {
+        if (this.loaded) return;
+        this.loaded = true;
+
         this.responseReceptionHandler = new ResponseReceptionHandlerImpl(this.redisBridgeClient, this.redisBridgeClient.getExecutorService(), this.connection, this.connection.async(), this.settings.responseTimeoutSeconds());
         this.responseReceptionHandler.load();
 
-        this.ackDeserializer = new AckDeserializerImpl(this.redisBridgeClient, this.connection, this.settings.ackTimeoutSeconds());
+        this.ackDeserializer = new AckDeserializerImpl(this.redisBridgeClient, this.redisBridgeClient.getExecutorService(), this.connection, this.settings.ackTimeoutSeconds());
         this.ackDeserializer.load();
 
         if (this.queueExecutor != null) {
@@ -67,7 +73,10 @@ public class MessageRouterImpl implements MessageRouter {
     }
 
     @Override
-    public void unload() {
+    public synchronized void unload() {
+        if (!this.loaded) return;
+        this.loaded = false;
+
         if (this.queueExecutor != null) {
             this.queueExecutor.shutdown();
             try {
@@ -102,79 +111,59 @@ public class MessageRouterImpl implements MessageRouter {
         if (messageQueue.isEmpty())
             return;
 
-        var async = this.connection.async();
-
         QueuedMessage<?> queuedMessage;
         while ((queuedMessage = messageQueue.poll()) != null) {
-            processQueueMessage(async, queuedMessage);
+            processQueueMessage(queuedMessage);
         }
     }
 
-    @SuppressWarnings({"unchecked", "rawtypes"})
-    private void processQueueMessage(RedisAsyncCommands<String, String> async, QueuedMessage<?> queuedMessage) {
+    private <T extends Message> void processQueueMessage(QueuedMessage<T> queuedMessage) {
+        dispatch(queuedMessage.message(), queuedMessage.receiver(), queuedMessage.future());
+    }
+
+    /**
+     * Runs the send interceptors, publishes the packet, and completes {@code resultFuture}
+     * once delivery (and the ACK, when requested) is confirmed. Shared by instant and queued publishing.
+     */
+    private <M extends Message> void dispatch(Packet<M> packet, MessageEntity receiver, CompletableFuture<Packet<M>> resultFuture) {
         try {
-            CompletableFuture<UUID> ackFuture = queuedMessage.message.ackRequested()
-                    ? this.ackDeserializer.expectAck(queuedMessage.message.uniqueId())
+            Packet<M> intercepted = packet;
+            for (MessageInterceptor interceptor : this.redisBridgeClient.interceptors()) {
+                intercepted = interceptor.onSend(intercepted);
+            }
+            final Packet<M> finalPacket = intercepted;
+
+            CompletableFuture<UUID> ackFuture = finalPacket.ackRequested()
+                    ? this.ackDeserializer.expectAck(finalPacket.uniqueId())
                     : null;
 
-            Packet<?> finalPacket = queuedMessage.message;
-            for (MessageInterceptor interceptor : this.redisBridgeClient.interceptors()) {
-                finalPacket = interceptor.onSend(finalPacket);
-            }
-
-            async.publish(queuedMessage.receiver.channel(), this.messagingService.serialize(finalPacket))
+            this.publisher.publish(receiver.channel(), this.messagingService.serialize(finalPacket))
                     .whenComplete((count, throwable) -> {
                         if (throwable != null) {
                             if (ackFuture != null) ackFuture.completeExceptionally(throwable);
-                            queuedMessage.future.completeExceptionally(throwable);
+                            resultFuture.completeExceptionally(throwable);
                         } else if (ackFuture == null) {
-                            queuedMessage.future.complete((Packet) queuedMessage.message);
+                            resultFuture.complete(finalPacket);
                         }
                     });
 
             if (ackFuture != null) {
-                ackFuture.thenAccept(msg -> queuedMessage.future.complete((Packet) queuedMessage.message))
+                ackFuture.thenAccept(id -> resultFuture.complete(finalPacket))
                         .exceptionally(throwable -> {
-                            queuedMessage.future.completeExceptionally(throwable);
+                            resultFuture.completeExceptionally(throwable);
                             return null;
                         });
             }
         } catch (Exception e) {
-            queuedMessage.future.completeExceptionally(e);
+            resultFuture.completeExceptionally(e);
         }
     }
 
     @Override
     public <M extends Message> CompletableFuture<Packet<M>> publish(@NotNull M message, @NotNull MessageEntity receiver) {
         Packet<M> packet = new PacketImpl<>(UUID.randomUUID(), this.sender, message);
-
-        for (MessageInterceptor interceptor : this.redisBridgeClient.interceptors()) {
-            packet = interceptor.onSend(packet);
-        }
-
         CompletableFuture<Packet<M>> resultFuture = new CompletableFuture<>();
-        CompletableFuture<UUID> ackFuture = packet.ackRequested() ? this.ackDeserializer.expectAck(packet.uniqueId()) : null;
-
-        String jsonMessage = this.messagingService.serialize(packet);
-        final Packet<M> finalActionMessage = packet;
-        this.connection.async().publish(receiver.channel(), jsonMessage)
-                .whenComplete((count, throwable) -> {
-                    if (throwable != null) {
-                        if (ackFuture != null) ackFuture.completeExceptionally(throwable);
-                        resultFuture.completeExceptionally(throwable);
-                    } else if (ackFuture == null) {
-                        resultFuture.complete(finalActionMessage);
-                    }
-                });
-
-        if (ackFuture != null) {
-            ackFuture.thenAccept(id -> resultFuture.complete(finalActionMessage))
-                    .exceptionally(throwable -> {
-                        resultFuture.completeExceptionally(throwable);
-                        return null;
-                    });
-        }
-
+        dispatch(packet, receiver, resultFuture);
         return resultFuture;
     }
 
@@ -194,7 +183,7 @@ public class MessageRouterImpl implements MessageRouter {
 
     @Override
     public <M extends Message, R extends Response> void publishResponse(@NotNull PacketResponse<M, R> messageResponse, @NotNull MessageEntity receiver) {
-        this.connection.async().publish(receiver.channel(), this.messagingService.serialize(messageResponse));
+        this.publisher.publish(receiver.channel(), this.messagingService.serialize(messageResponse));
     }
 
     @Override
@@ -215,7 +204,7 @@ public class MessageRouterImpl implements MessageRouter {
 
         String jsonMessage = this.messagingService.serialize(packet);
         final Packet<M> finalPacket = packet;
-        this.connection.async().publish(receiver.channel(), jsonMessage)
+        this.publisher.publish(receiver.channel(), jsonMessage)
                 .whenComplete((count, throwable) -> {
                     if (throwable != null) {
                         this.responseReceptionHandler.cancel(finalPacket.uniqueId(), throwable);
@@ -248,7 +237,7 @@ public class MessageRouterImpl implements MessageRouter {
 
         String jsonMessage = this.messagingService.serialize(packet);
         final Packet<M> finalPacket = packet;
-        this.connection.async().publish(receiver.channel(), jsonMessage)
+        this.publisher.publish(receiver.channel(), jsonMessage)
                 .whenComplete((count, throwable) -> {
                     int expectedCount = (count != null ? count.intValue() : 0) - (includeSender ? 0 : 1);
 
