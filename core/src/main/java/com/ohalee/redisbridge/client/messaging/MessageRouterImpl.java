@@ -191,6 +191,15 @@ public class MessageRouterImpl implements MessageRouter {
         this.publishResponse(PacketResponseImpl.<M, R>builder().originalMessage(original).response(response).build(), receiver);
     }
 
+    /**
+     * Replies inside this client's channel namespace, instead of the JVM-wide default one
+     * used by {@link MessageRouter#reply(Packet, Response)}.
+     */
+    @Override
+    public <M extends Message, R extends Response> void reply(Packet<M> original, R response) {
+        this.publishResponse(original, response, this.redisBridgeClient.channels().response(original.sender()));
+    }
+
     @Override
     public <M extends Message, R extends Response> CompletableFuture<PacketResponse<M, R>> waitResponse(@NotNull M message, @NotNull MessageEntity receiver) {
         Packet<M> packet = new PacketImpl<>(UUID.randomUUID(), this.sender, message);

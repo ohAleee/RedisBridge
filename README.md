@@ -8,6 +8,7 @@ A lightweight Java library for Redis-based inter-service messaging with request-
 ## Table of Contents
 
 - [Quick Start](#quick-start)
+- [Channel Prefix](#channel-prefix)
 - [Core Concepts](#core-concepts)
 - [Architecture](#architecture)
 - [ACK (Acknowledgements)](#ack-acknowledgements)
@@ -167,6 +168,9 @@ Subscribe the broadcast channel:
 redisClient.getRedisListener().subscribe(MessageEntity.broadcast("updates"));
 ```
 
+> If the client uses its own [channel prefix](#channel-prefix), build the entity from its namespace instead:
+> `client.channels().broadcast("updates")`.
+
 #### Wait for Response
 
 ```java
@@ -205,6 +209,58 @@ client.getRedisRouter().waitResponses(
     return null;
 });
 ```
+
+## Channel Prefix
+
+Every Redis channel is namespaced with a prefix (`<prefix>:target:<id>`, `<prefix>:broadcast`, …). The prefix is
+configured **per client**, so several projects can share the same Redis server — or the same JVM — without ever seeing
+each other's traffic.
+
+### Per-project prefix
+
+With the builder:
+
+```java
+RedisBridgeClient client = RedisBridgeClient.builder()
+    .clientId("my-service-1")
+    .channelPrefix("my-project") // my-project:target:my-service-1
+    .redisConnector(new MyRedisConnectionProvider())
+    .build();
+```
+
+Or by overriding `channels()`:
+
+```java
+RedisBridgeClient client = new RedisBridgeClient() {
+    // ... other overrides
+
+    @Override
+    public MessageChannels channels() {
+        return MessageChannels.withPrefix("my-project");
+    }
+};
+```
+
+Build entities from the client's own namespace so they follow its prefix:
+
+```java
+client.channels().broadcast("updates"); // my-project:updates:broadcast
+client.channels().of("my-service-2");   // my-project:target:my-service-2
+```
+
+The static `MessageEntity` factories (`MessageEntity.broadcast("updates")`, …) always use the JVM-wide default
+namespace, so use `client.channels()` whenever the client has its own prefix.
+
+### JVM-wide default
+
+Clients that don't configure a prefix use `MessageChannels.defaults()`, resolved once at startup from:
+
+1. the `redisbridge.channel.prefix` system property,
+2. the `REDISBRIDGE_CHANNEL_PREFIX` environment variable,
+3. `redisbridge`.
+
+> **Note:** clients only subscribe to channels of their own namespace, so peers that exchange messages must share the
+> same prefix.
 
 ## Interceptors
 

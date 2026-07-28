@@ -9,6 +9,11 @@ import org.jetbrains.annotations.NotNull;
  * <p>This record encapsulates the channel information used by Redis pub/sub for routing messages
  * to specific receivers or groups of receivers.</p>
  *
+ * <p>The static factory methods below build channels inside the JVM-wide default namespace
+ * ({@link MessageChannels#defaults()}). Projects that need their own channel prefix should use
+ * their client's namespace instead — {@code client.channels().broadcast("updates")} — or a
+ * namespace built with {@link MessageChannels#withPrefix(String)}.</p>
+ *
  * <p><b>Factory Methods:</b></p>
  * <ul>
  *   <li>{@link #broadcast()} - Creates an entity for broadcasting to all servers</li>
@@ -25,12 +30,14 @@ import org.jetbrains.annotations.NotNull;
 public interface MessageEntity {
 
     /**
-     * The prefix used for all Redis channels. Can be customized by setting the system property
-     * "redisbridge.channel.prefix" or environment variable "REDISBRIDGE_CHANNEL_PREFIX".
-     * Defaults to "redisbridge" if not specified.
+     * The JVM-wide default channel prefix, resolved from the system property
+     * "redisbridge.channel.prefix", then the environment variable "REDISBRIDGE_CHANNEL_PREFIX",
+     * and finally "redisbridge".
+     *
+     * <p>This is only the default: each client can use its own prefix, see
+     * {@link MessageChannels}.</p>
      */
-    String PREFIX = System.getProperty("redisbridge.channel.prefix",
-            System.getenv().getOrDefault("REDISBRIDGE_CHANNEL_PREFIX", "redisbridge"));
+    String PREFIX = MessageChannels.defaults().prefix();
 
     /**
      * Creates a message entity for broadcasting to all servers.
@@ -39,7 +46,7 @@ public interface MessageEntity {
      * @return a message entity for broadcasting to all servers
      */
     static @NotNull MessageEntity broadcast() {
-        return () -> PREFIX + ":broadcast";
+        return MessageChannels.defaults().broadcast();
     }
 
     /**
@@ -50,7 +57,7 @@ public interface MessageEntity {
      * @return a message entity for the specified broadcast channel
      */
     static @NotNull MessageEntity broadcast(@NotNull String name) {
-        return () -> PREFIX + ":" + name.toLowerCase() + ":broadcast";
+        return MessageChannels.defaults().broadcast(name);
     }
 
     /**
@@ -61,7 +68,7 @@ public interface MessageEntity {
      * @return a message entity targeting the specified server
      */
     static @NotNull MessageEntity of(@NotNull String serverID) {
-        return () -> PREFIX + ":target:" + serverID.toLowerCase();
+        return MessageChannels.defaults().of(serverID);
     }
 
     /**
@@ -72,7 +79,7 @@ public interface MessageEntity {
      * @return a message entity targeting the specific sender's response channel
      */
     static @NotNull MessageEntity response(@NotNull String serverID) {
-        return () -> PREFIX + ":response:" + serverID.toLowerCase();
+        return MessageChannels.defaults().response(serverID);
     }
 
     /**
@@ -93,7 +100,7 @@ public interface MessageEntity {
      * @return a message entity targeting the specific sender's ACK channel
      */
     static @NotNull MessageEntity ack(@NotNull String serverID) {
-        return () -> PREFIX + ":ack:" + serverID.toLowerCase();
+        return MessageChannels.defaults().ack(serverID);
     }
 
     /**

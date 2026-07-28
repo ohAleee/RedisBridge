@@ -1,6 +1,5 @@
 package com.ohalee.redisbridge.client.messaging.ack;
 
-import com.ohalee.redisbridge.api.messaging.MessageEntity;
 import com.ohalee.redisbridge.api.messaging.ack.exception.NoAckException;
 import com.ohalee.redisbridge.client.RedisBridgeClient;
 import com.ohalee.redisbridge.client.messaging.AbstractMessageHandler;
@@ -33,7 +32,7 @@ public class AckDeserializerImpl extends AbstractMessageHandler {
     public AckDeserializerImpl(RedisBridgeClient client, ExecutorService executorService,
                                StatefulRedisPubSubConnection<String, String> pubSubConnection, int timeoutSeconds) {
         super(client, executorService);
-        this.channel = MessageEntity.ack(client.clientId()).channel();
+        this.channel = client.channels().ack(client.clientId()).channel();
         this.pubSubConnection = pubSubConnection;
         this.messagingService = client.getMessagingService();
         this.timeoutSeconds = timeoutSeconds;

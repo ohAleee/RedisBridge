@@ -1,5 +1,6 @@
 package com.ohalee.redisbridge.client;
 
+import com.ohalee.redisbridge.api.messaging.MessageChannels;
 import com.ohalee.redisbridge.api.messaging.MessageEntity;
 import com.ohalee.redisbridge.api.messaging.MessageRouter;
 import com.ohalee.redisbridge.api.messaging.interceptor.MessageInterceptor;
@@ -133,8 +134,33 @@ public abstract class RedisBridgeClient {
         this.executorService.shutdown();
     }
 
+    /**
+     * The Redis channel namespace of this client.
+     *
+     * <p>Every channel this client publishes to or subscribes to lives inside this namespace,
+     * so a project can keep its traffic separate from other projects sharing the same Redis
+     * server (or the same JVM). Override it to use a project-specific prefix:</p>
+     *
+     * <pre>{@code
+     * @Override
+     * public MessageChannels channels() {
+     *     return MessageChannels.withPrefix("my-project");
+     * }
+     * }</pre>
+     *
+     * <p>Clients built through {@link Builder} configure it with
+     * {@link Builder#channelPrefix(String)} or {@link Builder#channels(MessageChannels)}.</p>
+     *
+     * <p>Defaults to {@link MessageChannels#defaults()}, the JVM-wide namespace.</p>
+     *
+     * @return the channel namespace used by this client
+     */
+    public MessageChannels channels() {
+        return MessageChannels.defaults();
+    }
+
     public MessageEntity platformEntity() {
-        return MessageEntity.of(this.clientId());
+        return this.channels().of(this.clientId());
     }
 
     public abstract String clientId();
@@ -151,8 +177,35 @@ public abstract class RedisBridgeClient {
         private RedisConnectionProvider redisConnector;
         private ExecutorService executorService = Executors.newVirtualThreadPerTaskExecutor();
         private MessageRegistry messageRegistry = MESSAGE_REGISTRY;
+        private MessageChannels channels = MessageChannels.defaults();
 
         public Builder() {
+        }
+
+        /**
+         * Sets the channel prefix of this client, isolating its traffic from projects
+         * using a different prefix.
+         *
+         * @param channelPrefix the project prefix (e.g. "my-project")
+         * @return this builder
+         * @throws IllegalArgumentException if the prefix is null or blank
+         */
+        public Builder channelPrefix(String channelPrefix) {
+            return this.channels(MessageChannels.withPrefix(channelPrefix));
+        }
+
+        /**
+         * Sets the channel namespace of this client.
+         *
+         * @param channels the namespace every channel of this client belongs to
+         * @return this builder
+         */
+        public Builder channels(MessageChannels channels) {
+            if (channels == null)
+                throw new IllegalArgumentException("channels must not be null");
+
+            this.channels = channels;
+            return this;
         }
 
         public Builder messageRegistry(MessageRegistry messageRegistry) {
@@ -190,10 +243,16 @@ public abstract class RedisBridgeClient {
             this.adapters.forEach(messagingBuilder::registerAdapter);
             RedisMessagingService messagingService = messagingBuilder.build();
 
+            MessageChannels channels = this.channels;
             return new RedisBridgeClient(this.executorService, this.messageRegistry, messagingService) {
                 @Override
                 public String clientId() {
                     return clientId;
+                }
+
+                @Override
+                public MessageChannels channels() {
+                    return channels;
                 }
 
                 @Override

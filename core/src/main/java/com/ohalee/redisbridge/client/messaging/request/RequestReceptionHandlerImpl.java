@@ -92,7 +92,7 @@ public class RequestReceptionHandlerImpl extends AbstractMessageHandler implemen
             ackPayload.addProperty("uniqueId", id);
 
             this.client.getPublisher()
-                    .publish(MessageEntity.ack(senderId).channel(), this.messagingService.serialize(ackPayload))
+                    .publish(this.client.channels().ack(senderId).channel(), this.messagingService.serialize(ackPayload))
                     .exceptionally(throwable -> {
                         LOGGER.log(Level.WARNING, "Failed to send ACK for message " + id, throwable);
                         return null;

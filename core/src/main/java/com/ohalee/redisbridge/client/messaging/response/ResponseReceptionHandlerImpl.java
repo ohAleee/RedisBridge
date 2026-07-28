@@ -1,6 +1,5 @@
 package com.ohalee.redisbridge.client.messaging.response;
 
-import com.ohalee.redisbridge.api.messaging.MessageEntity;
 import com.ohalee.redisbridge.api.messaging.request.Message;
 import com.ohalee.redisbridge.api.messaging.request.MessageRegistration;
 import com.ohalee.redisbridge.api.messaging.request.MessageRegistry;
@@ -45,7 +44,7 @@ public class ResponseReceptionHandlerImpl extends AbstractMessageHandler impleme
         super(client, executorService);
         this.messageRegistry = client.getMessageRegistry();
         this.messagingService = client.getMessagingService();
-        this.channel = MessageEntity.response(client.clientId()).channel();
+        this.channel = client.channels().response(client.clientId()).channel();
         this.connection = connection;
         this.commands = commands;
         this.responseTimeoutSeconds = responseTimeoutSeconds;

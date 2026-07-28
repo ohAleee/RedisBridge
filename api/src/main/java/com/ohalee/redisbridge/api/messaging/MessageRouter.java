@@ -100,6 +100,9 @@ public interface MessageRouter {
     /**
      * Convenience method to reply to a message, automatically routing the response back to the original sender.
      *
+     * <p>Implementations reply inside their own channel namespace; this default uses the JVM-wide one
+     * ({@link MessageChannels#defaults()}).</p>
+     *
      * @param original the original message being responded to
      * @param response the response to send back
      * @param <M>      the original message type
